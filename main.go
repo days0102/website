@@ -2,10 +2,12 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -32,6 +34,7 @@ func main() {
 	// API routes
 	mux.HandleFunc("/api/projects", projectsHandler)
 	mux.HandleFunc("/api/blog", blogHandler)
+	mux.HandleFunc("/api/blog/content", blogContentHandler)
 
 	// Static files service
 	staticPath := "./static"
@@ -39,7 +42,7 @@ func main() {
 		log.Printf("Static directory '%s' not found, API only mode", staticPath)
 	} else {
 		fs := http.FileServer(http.Dir(staticPath))
-		mux.Handle("/", http.StripPrefix("/", fs))
+		mux.Handle("/", fs)
 	}
 
 	// HTTPS Configuration with autocert
@@ -56,8 +59,6 @@ func main() {
 			httpPort = "80" // Standard HTTP port
 		}
 		log.Printf("Starting HTTP redirector on port %s...", httpPort)
-		// autocert.Manager.HTTPHandler returns a handler that handles ACME challenges
-		// and redirects all other traffic to HTTPS.
 		if err := http.ListenAndServe(":"+httpPort, certManager.HTTPHandler(nil)); err != nil {
 			log.Printf("HTTP redirector failed: %v", err)
 		}
@@ -96,13 +97,55 @@ func projectsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func blogHandler(w http.ResponseWriter, r *http.Request) {
-	file, err := os.Open("data/blogs.json")
+	files, err := os.ReadDir("data/posts")
 	if err != nil {
-		http.Error(w, "Could not open blog data", http.StatusInternalServerError)
+		http.Error(w, "Could not read blog posts", http.StatusInternalServerError)
 		return
 	}
-	defer file.Close()
+
+	var blogs []Blog
+	for i, f := range files {
+		if f.IsDir() || filepath.Ext(f.Name()) != ".md" {
+			continue
+		}
+
+		name := f.Name()
+		title := name[:len(name)-3]
+		date := "2026-04-30"
+		if len(name) > 10 {
+			date = name[:10]
+			title = name[11 : len(name)-3]
+		}
+
+		blogs = append(blogs, Blog{
+			ID:      i + 1,
+			Title:   title,
+			Summary: "Click to read the full article...",
+			Date:    date,
+		})
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	io.Copy(w, file)
+	json.NewEncoder(w).Encode(blogs)
+}
+
+func blogContentHandler(w http.ResponseWriter, r *http.Request) {
+	title := r.URL.Query().Get("title")
+	date := r.URL.Query().Get("date")
+	if title == "" || date == "" {
+		http.Error(w, "Missing title or date", http.StatusBadRequest)
+		return
+	}
+
+	fileName := date + "-" + title + ".md"
+	filePath := filepath.Join("data/posts", fileName)
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		http.Error(w, "Blog post not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/markdown")
+	w.Write(content)
 }
