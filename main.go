@@ -224,10 +224,15 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
-	msg := []byte(fmt.Sprintf("To: %s\r\n"+
-		"Subject: Portfolio Contact: %s\r\n"+
+	// Important: The 'From' header must match the authenticated user for many providers like QQ/Gmail
+	msg := []byte(fmt.Sprintf("From: %s\r\n"+
+		"To: %s\r\n"+
+		"Subject: Portfolio Contact from %s\r\n"+
+		"Content-Type: text/plain; charset=UTF-8\r\n"+
 		"\r\n"+
-		"From: %s\n\n%s\r\n", toEmail, form.Email, form.Email, form.Message))
+		"You received a new message from your portfolio website.\n\n"+
+		"Visitor Email: %s\n"+
+		"Message:\n%s\r\n", smtpUser, toEmail, form.Email, form.Email, form.Message))
 
 	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, smtpUser, []string{toEmail}, msg)
 	if err != nil {
