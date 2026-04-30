@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/smtp"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sync"
+	"time"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -34,6 +38,16 @@ type Blog struct {
 type ContactForm struct {
 	Email   string `json:"email"`
 	Message string `json:"message"`
+}
+
+// RateLimiter stores IP access times
+type RateLimiter struct {
+	sync.Mutex
+	ips map[string][]time.Time
+}
+
+var limiter = RateLimiter{
+	ips: make(map[string][]time.Time),
 }
 
 func main() {
@@ -65,7 +79,7 @@ func main() {
 	go func() {
 		httpPort := os.Getenv("HTTP_PORT")
 		if httpPort == "" {
-			httpPort = "80" // Standard HTTP port
+			httpPort = "80"
 		}
 		log.Printf("Starting HTTP redirector on port %s...", httpPort)
 		if err := http.ListenAndServe(":"+httpPort, certManager.HTTPHandler(nil)); err != nil {
@@ -75,7 +89,7 @@ func main() {
 
 	httpsPort := os.Getenv("PORT")
 	if httpsPort == "" {
-		httpsPort = "443" // Standard HTTPS port
+		httpsPort = "443"
 	}
 
 	server := &http.Server{
@@ -100,7 +114,6 @@ func projectsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-
 	w.Header().Set("Content-Type", "application/json")
 	io.Copy(w, file)
 }
@@ -117,7 +130,6 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 		if f.IsDir() || filepath.Ext(f.Name()) != ".md" {
 			continue
 		}
-
 		name := f.Name()
 		title := name[:len(name)-3]
 		date := "2026-04-30"
@@ -125,7 +137,6 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 			date = name[:10]
 			title = name[11 : len(name)-3]
 		}
-
 		blogs = append(blogs, Blog{
 			ID:      i + 1,
 			Title:   title,
@@ -133,7 +144,6 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 			Date:    date,
 		})
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(blogs)
 }
@@ -145,16 +155,13 @@ func blogContentHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing title or date", http.StatusBadRequest)
 		return
 	}
-
 	fileName := date + "-" + title + ".md"
 	filePath := filepath.Join("data/posts", fileName)
-
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		http.Error(w, "Blog post not found", http.StatusNotFound)
 		return
 	}
-
 	w.Header().Set("Content-Type", "text/markdown")
 	w.Write(content)
 }
@@ -165,13 +172,45 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. IP Rate Limiting (3 emails per hour per IP)
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	limiter.Lock()
+	now := time.Now()
+	var recent []time.Time
+	for _, t := range limiter.ips[ip] {
+		if now.Sub(t) < time.Hour {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= 3 {
+		limiter.Unlock()
+		http.Error(w, "Rate limit exceeded. Please try again in an hour.", http.StatusTooManyRequests)
+		return
+	}
+	limiter.ips[ip] = append(recent, now)
+	limiter.Unlock()
+
+	// 2. Decode and Validate
 	var form ContactForm
 	if err := json.NewDecoder(r.Body).Decode(&form); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	// Email configuration from environment variables
+	// Email regex
+	emailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
+	if !emailRegex.MatchString(form.Email) {
+		http.Error(w, "Invalid email address", http.StatusBadRequest)
+		return
+	}
+
+	// Message length check
+	if len(form.Message) < 10 || len(form.Message) > 1000 {
+		http.Error(w, "Message must be between 10 and 1000 characters", http.StatusBadRequest)
+		return
+	}
+
+	// 3. Send Email
 	smtpHost := os.Getenv("SMTP_HOST")
 	smtpPort := os.Getenv("SMTP_PORT")
 	smtpUser := os.Getenv("SMTP_USER")
@@ -179,15 +218,14 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 	toEmail := os.Getenv("CONTACT_TO")
 
 	if smtpHost == "" || smtpUser == "" || smtpPass == "" {
-		log.Printf("SMTP configuration missing. Message from %s: %s", form.Email, form.Message)
-		// Return success to user but log it locally if SMTP is not configured
+		log.Printf("SMTP missing. Message from %s: %s", form.Email, form.Message)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
 	msg := []byte(fmt.Sprintf("To: %s\r\n"+
-		"Subject: New Contact Message from %s\r\n"+
+		"Subject: Portfolio Contact: %s\r\n"+
 		"\r\n"+
 		"From: %s\n\n%s\r\n", toEmail, form.Email, form.Email, form.Message))
 

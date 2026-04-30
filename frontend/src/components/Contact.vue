@@ -1,12 +1,26 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 const email = ref('');
 const message = ref('');
 const isSubmitting = ref(false);
 const statusMsg = ref('');
 
+const isEmailValid = computed(() => {
+  const re = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$/;
+  return re.test(email.value.toLowerCase());
+});
+
+const isMessageValid = computed(() => {
+  return message.value.length >= 10 && message.value.length <= 1000;
+});
+
 const submitForm = async () => {
+  if (!isEmailValid.value || !isMessageValid.value) {
+    statusMsg.value = 'Please fix the errors before submitting.';
+    return;
+  }
+
   isSubmitting.value = true;
   statusMsg.value = '';
   
@@ -21,8 +35,11 @@ const submitForm = async () => {
       statusMsg.value = 'Message sent successfully! I will get back to you soon.';
       email.value = '';
       message.value = '';
+    } else if (response.status === 429) {
+      statusMsg.value = 'Too many messages. Please try again in an hour.';
     } else {
-      statusMsg.value = 'Failed to send message. Please try again later.';
+      const errorText = await response.text();
+      statusMsg.value = `Failed: ${errorText || 'Server error'}`;
     }
   } catch (error) {
     console.error('Submission error:', error);
@@ -49,16 +66,30 @@ const submitForm = async () => {
       <form @submit.prevent="submitForm" class="contact-form">
         <div class="form-group">
           <label>Your Email</label>
-          <input v-model="email" type="email" placeholder="email@example.com" required />
+          <input 
+            v-model="email" 
+            type="email" 
+            placeholder="email@example.com" 
+            required 
+            :class="{ invalid: email && !isEmailValid }"
+          />
+          <span v-if="email && !isEmailValid" class="error-text">Please enter a valid email.</span>
         </div>
         <div class="form-group">
-          <label>Message</label>
-          <textarea v-model="message" rows="5" placeholder="Tell me about your project..." required></textarea>
+          <label>Message ({{ message.length }}/1000)</label>
+          <textarea 
+            v-model="message" 
+            rows="5" 
+            placeholder="Tell me about your project..." 
+            required
+            :class="{ invalid: message && !isMessageValid }"
+          ></textarea>
+          <span v-if="message && message.length < 10" class="error-text">Min 10 characters required.</span>
         </div>
-        <button type="submit" :disabled="isSubmitting">
+        <button type="submit" :disabled="!!(isSubmitting || (email && !isEmailValid) || (message && !isMessageValid))">
           {{ isSubmitting ? 'Sending...' : 'Send Message' }}
         </button>
-        <p v-if="statusMsg" :class="['status-msg', { error: statusMsg.includes('Failed') || statusMsg.includes('error') }]">
+        <p v-if="statusMsg" :class="['status-msg', { error: statusMsg.includes('Failed') || statusMsg.includes('error') || statusMsg.includes('Too many') }]">
           {{ statusMsg }}
         </p>
       </form>
@@ -126,6 +157,15 @@ input, textarea {
 input:focus, textarea:focus {
   outline: none;
   border-color: var(--primary);
+}
+input.invalid, textarea.invalid {
+  border-color: #ef4444;
+}
+.error-text {
+  color: #ef4444;
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  display: block;
 }
 button {
   width: 100%;
