@@ -3,9 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/smtp"
 	"os"
 	"path/filepath"
 
@@ -28,6 +30,12 @@ type Blog struct {
 	Date    string `json:"date"`
 }
 
+// ContactForm represents the structure of the contact message
+type ContactForm struct {
+	Email   string `json:"email"`
+	Message string `json:"message"`
+}
+
 func main() {
 	mux := http.NewServeMux()
 
@@ -35,6 +43,7 @@ func main() {
 	mux.HandleFunc("/api/projects", projectsHandler)
 	mux.HandleFunc("/api/blog", blogHandler)
 	mux.HandleFunc("/api/blog/content", blogContentHandler)
+	mux.HandleFunc("/api/contact", contactHandler)
 
 	// Static files service
 	staticPath := "./static"
@@ -148,4 +157,46 @@ func blogContentHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/markdown")
 	w.Write(content)
+}
+
+func contactHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var form ContactForm
+	if err := json.NewDecoder(r.Body).Decode(&form); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Email configuration from environment variables
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+	smtpUser := os.Getenv("SMTP_USER")
+	smtpPass := os.Getenv("SMTP_PASS")
+	toEmail := os.Getenv("CONTACT_TO")
+
+	if smtpHost == "" || smtpUser == "" || smtpPass == "" {
+		log.Printf("SMTP configuration missing. Message from %s: %s", form.Email, form.Message)
+		// Return success to user but log it locally if SMTP is not configured
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
+	msg := []byte(fmt.Sprintf("To: %s\r\n"+
+		"Subject: New Contact Message from %s\r\n"+
+		"\r\n"+
+		"From: %s\n\n%s\r\n", toEmail, form.Email, form.Email, form.Message))
+
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, smtpUser, []string{toEmail}, msg)
+	if err != nil {
+		log.Printf("Failed to send email: %v", err)
+		http.Error(w, "Failed to send message", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

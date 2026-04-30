@@ -4,16 +4,32 @@ import { ref } from 'vue';
 const email = ref('');
 const message = ref('');
 const isSubmitting = ref(false);
+const statusMsg = ref('');
 
-const submitForm = () => {
+const submitForm = async () => {
   isSubmitting.value = true;
-  // Simulate API call
-  setTimeout(() => {
-    alert(`Thank you! Message sent by ${email.value}`);
-    email.value = '';
-    message.value = '';
+  statusMsg.value = '';
+  
+  try {
+    const response = await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.value, message: message.value })
+    });
+
+    if (response.ok) {
+      statusMsg.value = 'Message sent successfully! I will get back to you soon.';
+      email.value = '';
+      message.value = '';
+    } else {
+      statusMsg.value = 'Failed to send message. Please try again later.';
+    }
+  } catch (error) {
+    console.error('Submission error:', error);
+    statusMsg.value = 'An error occurred. Please check your connection.';
+  } finally {
     isSubmitting.value = false;
-  }, 1000);
+  }
 };
 </script>
 
@@ -42,6 +58,9 @@ const submitForm = () => {
         <button type="submit" :disabled="isSubmitting">
           {{ isSubmitting ? 'Sending...' : 'Send Message' }}
         </button>
+        <p v-if="statusMsg" :class="['status-msg', { error: statusMsg.includes('Failed') || statusMsg.includes('error') }]">
+          {{ statusMsg }}
+        </p>
       </form>
     </div>
   </section>
@@ -127,6 +146,14 @@ button:hover:not(:disabled) {
 button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+.status-msg {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: var(--primary);
+}
+.status-msg.error {
+  color: #ef4444;
 }
 
 @media (max-width: 900px) {
