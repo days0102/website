@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "title": "Why I chose Go for my personal website",
+    "summary": "Exploring the simplicity, performance, and robustness of the Go standard library for web development.",
+    "date": "2026-04-20"
+  },
+  {
+    "id": 2,
+    "title": "Clean CSS: Tips for 2026",
+    "summary": "Mastering CSS Variables, Container Queries, and modern layout techniques to build faster websites.",
+    "date": "2026-04-25"
+  },
+  {
+    "id": 3,
+    "title": "The Future of Web Development",
+    "summary": "A deep dive into how AI and edge computing are changing the way we build and deploy applications.",
+    "date": "2026-04-29"
+  }
+]
