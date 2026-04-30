@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
 	"os"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // Project represents a portfolio project
@@ -24,9 +27,11 @@ type Blog struct {
 }
 
 func main() {
+	mux := http.NewServeMux()
+
 	// API routes
-	http.HandleFunc("/api/projects", projectsHandler)
-	http.HandleFunc("/api/blog", blogHandler)
+	mux.HandleFunc("/api/projects", projectsHandler)
+	mux.HandleFunc("/api/blog", blogHandler)
 
 	// Static files service
 	staticPath := "./static"
@@ -34,17 +39,47 @@ func main() {
 		log.Printf("Static directory '%s' not found, API only mode", staticPath)
 	} else {
 		fs := http.FileServer(http.Dir(staticPath))
-		http.Handle("/", http.StripPrefix("/", fs))
+		mux.Handle("/", http.StripPrefix("/", fs))
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// HTTPS Configuration with autocert
+	certManager := autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist("wzlin.top", "www.wzlin.top"),
+		Cache:      autocert.DirCache("certs"),
 	}
 
-	log.Printf("Server starting on port %s...", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+	// Redirect HTTP to HTTPS
+	go func() {
+		httpPort := os.Getenv("HTTP_PORT")
+		if httpPort == "" {
+			httpPort = "80" // Standard HTTP port
+		}
+		log.Printf("Starting HTTP redirector on port %s...", httpPort)
+		// autocert.Manager.HTTPHandler returns a handler that handles ACME challenges
+		// and redirects all other traffic to HTTPS.
+		if err := http.ListenAndServe(":"+httpPort, certManager.HTTPHandler(nil)); err != nil {
+			log.Printf("HTTP redirector failed: %v", err)
+		}
+	}()
+
+	httpsPort := os.Getenv("PORT")
+	if httpsPort == "" {
+		httpsPort = "443" // Standard HTTPS port
+	}
+
+	server := &http.Server{
+		Addr:    ":" + httpsPort,
+		Handler: mux,
+		TLSConfig: &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+		},
+	}
+
+	log.Printf("Starting HTTPS server on port %s...", httpsPort)
+	if err := server.ListenAndServeTLS("", ""); err != nil {
+		log.Fatalf("HTTPS server failed to start: %v", err)
 	}
 }
 
