@@ -5,6 +5,8 @@ ENV_FILE=".env"
 
 if [ -f "$ENV_FILE" ]; then
     echo "Loading environment variables from $ENV_FILE..."
+    # Secure the .env file permissions
+    chmod 600 "$ENV_FILE"
     # Export variables from .env, ignoring comments and empty lines
     export $(grep -v '^#' "$ENV_FILE" | xargs)
 else

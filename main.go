@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -93,8 +94,11 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:    ":" + httpsPort,
-		Handler: mux,
+		Addr:         ":" + httpsPort,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
 			MinVersion:     tls.VersionTLS12,
@@ -151,12 +155,26 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 func blogContentHandler(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Query().Get("title")
 	date := r.URL.Query().Get("date")
-	if title == "" || date == "" {
-		http.Error(w, "Missing title or date", http.StatusBadRequest)
+
+	// 1. Path Traversal Protection
+	// Only allow alphanumeric characters, dashes, and underscores
+	validParam := regexp.MustCompile(`^[a-zA-Z0-9\-_]+$`)
+	if !validParam.MatchString(title) || !validParam.MatchString(date) {
+		http.Error(w, "Invalid parameters", http.StatusBadRequest)
 		return
 	}
+
 	fileName := date + "-" + title + ".md"
 	filePath := filepath.Join("data/posts", fileName)
+
+	// Additional check: Ensure the resulting path is still within data/posts
+	absBase, _ := filepath.Abs("data/posts")
+	absTarget, err := filepath.Abs(filePath)
+	if err != nil || !strings.HasPrefix(absTarget, absBase) {
+		http.Error(w, "Access denied", http.StatusForbidden)
+		return
+	}
+
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		http.Error(w, "Blog post not found", http.StatusNotFound)
@@ -172,7 +190,6 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. IP Rate Limiting (3 emails per hour per IP)
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	limiter.Lock()
 	now := time.Now()
@@ -190,27 +207,27 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 	limiter.ips[ip] = append(recent, now)
 	limiter.Unlock()
 
-	// 2. Decode and Validate
 	var form ContactForm
 	if err := json.NewDecoder(r.Body).Decode(&form); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	// Email regex
+	// 2. SMTP Header Injection Protection
+	// Strip any newline characters from user-provided email used in headers
+	cleanEmail := strings.NewReplacer("\r", "", "\n", "").Replace(form.Email)
+
 	emailRegex := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
-	if !emailRegex.MatchString(form.Email) {
+	if !emailRegex.MatchString(cleanEmail) {
 		http.Error(w, "Invalid email address", http.StatusBadRequest)
 		return
 	}
 
-	// Message length check
 	if len(form.Message) < 10 || len(form.Message) > 1000 {
 		http.Error(w, "Message must be between 10 and 1000 characters", http.StatusBadRequest)
 		return
 	}
 
-	// 3. Send Email
 	smtpHost := os.Getenv("SMTP_HOST")
 	smtpPort := os.Getenv("SMTP_PORT")
 	smtpUser := os.Getenv("SMTP_USER")
@@ -218,13 +235,12 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 	toEmail := os.Getenv("CONTACT_TO")
 
 	if smtpHost == "" || smtpUser == "" || smtpPass == "" {
-		log.Printf("SMTP missing. Message from %s: %s", form.Email, form.Message)
+		log.Printf("SMTP missing. Message from %s: %s", cleanEmail, form.Message)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
-	// Important: The 'From' header must match the authenticated user for many providers like QQ/Gmail
 	msg := []byte(fmt.Sprintf("From: %s\r\n"+
 		"To: %s\r\n"+
 		"Subject: Portfolio Contact from %s\r\n"+
@@ -232,7 +248,7 @@ func contactHandler(w http.ResponseWriter, r *http.Request) {
 		"\r\n"+
 		"You received a new message from your portfolio website.\n\n"+
 		"Visitor Email: %s\n"+
-		"Message:\n%s\r\n", smtpUser, toEmail, form.Email, form.Email, form.Message))
+		"Message:\n%s\r\n", smtpUser, toEmail, cleanEmail, cleanEmail, form.Message))
 
 	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, smtpUser, []string{toEmail}, msg)
 	if err != nil {
