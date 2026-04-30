@@ -1,20 +1,20 @@
 [
   {
     "id": 1,
-    "title": "E-commerce Platform",
-    "description": "A high-performance microservices-based e-commerce solution built with Go, Gin, and PostgreSQL.",
-    "link": "https://github.com/lwz/ecommerce"
+    "title": "Parallel File System Optimizer",
+    "description": "A performance analysis tool for Lustre and GPFS, designed to identify I/O bottlenecks in HPC clusters.",
+    "link": "https://github.com/lwz/pfs-optimizer"
   },
   {
     "id": 2,
-    "title": "AI Image Generator",
-    "description": "Web application that uses Stable Diffusion API to generate artistic images from text prompts.",
-    "link": "https://github.com/lwz/ai-gen"
+    "title": "TinyDBMS Kernel",
+    "description": "A educational database kernel implementing B+ tree indexing and a custom buffer pool manager.",
+    "link": "https://github.com/lwz/tinydbms"
   },
   {
     "id": 3,
-    "title": "Real-time Chat App",
-    "description": "Secure messaging app with end-to-end encryption using WebSockets and Vue 3.",
-    "link": "https://github.com/lwz/chat-app"
+    "title": "Blockchain Ledger Explorer",
+    "description": "High-speed block explorer and analytics platform for EVM-compatible networks, built with Go.",
+    "link": "https://github.com/lwz/ledger-explorer"
   }
 ]

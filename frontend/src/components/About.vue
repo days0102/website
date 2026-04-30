@@ -1,8 +1,8 @@
 <script setup lang="ts">
 const skills = [
-  { category: 'Frontend', items: ['Vue 3', 'TypeScript', 'Vite', 'Tailwind CSS'] },
-  { category: 'Backend', items: ['Go', 'Node.js', 'PostgreSQL', 'Redis'] },
-  { category: 'DevOps', items: ['Docker', 'Nginx', 'GitHub Actions', 'Linux'] }
+  { category: 'Systems & HPC', items: ['HPC', 'Parallel File Systems', 'Linux Kernel', 'C/C++'] },
+  { category: 'Storage & DB', items: ['Storage Systems', 'DBMS Kernels', 'Distributed Systems', 'Blockchain'] },
+  { category: 'Full-stack', items: ['Go', 'Vue 3', 'TypeScript', 'PostgreSQL'] }
 ];
 </script>
 
@@ -11,11 +11,12 @@ const skills = [
     <h1>About Me</h1>
     <div class="about-grid">
       <div class="bio">
-        <p>I am a passionate software engineer based in China, dedicated to building clean, efficient, and user-centric web applications.</p>
-        <p>With a strong foundation in both frontend and backend technologies, I enjoy solving complex problems and turning ideas into reality through code.</p>
+        <p>I am a researcher and software engineer with a deep fascination for the underlying mechanics of modern computing. My work focuses on <strong>High Performance Computing (HPC)</strong>, where I explore the intricacies of <strong>Parallel File Systems</strong> and next-generation <strong>Storage Systems</strong>.</p>
+        <p>As a systems enthusiast, I spend my time diving into the core of <strong>Operating Systems</strong> and <strong>Database Management Systems</strong>. I believe that understanding the kernel is the key to building truly optimized and robust software.</p>
+        <p>Beyond systems research, I am a <strong>Full-stack Developer</strong> and an avid <strong>Cryptocurrency Enthusiast</strong>. I love turning complex architectural concepts into functional, high-performance digital experiences.</p>
       </div>
       <div class="skills">
-        <h3>Technical Skills</h3>
+        <h3>Technical Expertise</h3>
         <div class="skill-groups">
           <div v-for="skill in skills" :key="skill.category" class="skill-group">
             <h4>{{ skill.category }}</h4>
@@ -37,9 +38,13 @@ const skills = [
   align-items: start;
 }
 .bio p {
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   color: var(--text-muted);
   margin-bottom: 1.5rem;
+  line-height: 1.8;
+}
+.bio strong {
+  color: var(--text-main);
 }
 h3 {
   margin-top: 0;

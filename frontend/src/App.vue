@@ -21,8 +21,8 @@ import Contact from './components/Contact.vue'
   <main>
     <div class="hero">
       <div class="container">
-        <h1>Building digital <br/><span class="gradient-text">experiences.</span></h1>
-        <p class="subtitle">Full-stack developer focused on minimalist design and clean code.</p>
+        <h1>Exploring the <br/><span class="gradient-text">depths of systems.</span></h1>
+        <p class="subtitle">HPC Researcher & Full-stack Engineer. Dedicated to Parallel File Systems, Storage Architectures, and Kernel Internals.</p>
       </div>
     </div>
     <div class="container">
